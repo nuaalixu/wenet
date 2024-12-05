@@ -63,45 +63,59 @@ def Dataset(data_type,
                                              shuffle=list_shuffle,
                                              shuffle_size=list_shuffle_size,
                                              cycle=cycle)
-    dataset = dataset.map_ignore_error(processor.decode_wav)
+        
+    use_precomputed_feat = conf.get('use_precomputed_feat', False)
+    if not use_precomputed_feat:
+        dataset = dataset.map_ignore_error(processor.decode_wav)
 
-    singal_channel_conf = conf.get('singal_channel_conf', {})
-    dataset = dataset.map(
-        partial(processor.singal_channel, **singal_channel_conf))
-
-    speaker_conf = conf.get('speaker_conf', None)
-    if speaker_conf is not None:
-        assert 'speaker_table_path' in speaker_conf
-        speaker_table = read_symbol_table(speaker_conf['speaker_table_path'])
+        singal_channel_conf = conf.get('singal_channel_conf', {})
         dataset = dataset.map(
-            partial(processor.parse_speaker, speaker_dict=speaker_table))
+            partial(processor.singal_channel, **singal_channel_conf))
 
-    if tokenizer is not None:
-        dataset = dataset.map(partial(processor.tokenize, tokenizer=tokenizer))
+        speaker_conf = conf.get('speaker_conf', None)
+        if speaker_conf is not None:
+            assert 'speaker_table_path' in speaker_conf
+            speaker_table = read_symbol_table(speaker_conf['speaker_table_path'])
+            dataset = dataset.map(
+                partial(processor.parse_speaker, speaker_dict=speaker_table))
 
-    filter_conf = conf.get('filter_conf', {})
-    dataset = dataset.filter(partial(processor.filter, **filter_conf))
+        if tokenizer is not None:
+            dataset = dataset.map(partial(processor.tokenize, tokenizer=tokenizer))
 
-    resample_conf = conf.get('resample_conf', {})
-    dataset = dataset.map(partial(processor.resample, **resample_conf))
+        filter_conf = conf.get('filter_conf', {})
+        dataset = dataset.filter(partial(processor.filter, **filter_conf))
 
-    speed_perturb = conf.get('speed_perturb', False)
-    if speed_perturb:
-        dataset = dataset.map(partial(processor.speed_perturb))
+        resample_conf = conf.get('resample_conf', {})
+        dataset = dataset.map(partial(processor.resample, **resample_conf))
 
-    feats_type = conf.get('feats_type', 'fbank')
-    assert feats_type in ['fbank', 'mfcc', 'log_mel_spectrogram']
-    if feats_type == 'fbank':
-        fbank_conf = conf.get('fbank_conf', {})
-        dataset = dataset.map(partial(processor.compute_fbank, **fbank_conf))
-    elif feats_type == 'mfcc':
-        mfcc_conf = conf.get('mfcc_conf', {})
-        dataset = dataset.map(partial(processor.compute_mfcc, **mfcc_conf))
-    elif feats_type == 'log_mel_spectrogram':
-        log_mel_spectrogram_conf = conf.get('log_mel_spectrogram_conf', {})
-        dataset = dataset.map(
-            partial(processor.compute_log_mel_spectrogram,
-                    **log_mel_spectrogram_conf))
+        speed_perturb = conf.get('speed_perturb', False)
+        if speed_perturb:
+            dataset = dataset.map(partial(processor.speed_perturb))
+
+        feats_type = conf.get('feats_type', 'fbank')
+        assert feats_type in ['fbank', 'mfcc', 'log_mel_spectrogram']
+        if feats_type == 'fbank':
+            fbank_conf = conf.get('fbank_conf', {})
+            dataset = dataset.map(partial(processor.compute_fbank, **fbank_conf))
+        elif feats_type == 'mfcc':
+            mfcc_conf = conf.get('mfcc_conf', {})
+            dataset = dataset.map(partial(processor.compute_mfcc, **mfcc_conf))
+        elif feats_type == 'log_mel_spectrogram':
+            log_mel_spectrogram_conf = conf.get('log_mel_spectrogram_conf', {})
+            dataset = dataset.map(
+                partial(processor.compute_log_mel_spectrogram,
+                        **log_mel_spectrogram_conf))
+    else:
+        speaker_conf = conf.get('speaker_conf', None)
+        if speaker_conf is not None:
+            assert 'speaker_table_path' in speaker_conf
+            speaker_table = read_symbol_table(speaker_conf['speaker_table_path'])
+            dataset = dataset.map(
+                partial(processor.parse_speaker, speaker_dict=speaker_table))
+
+        if tokenizer is not None:
+            dataset = dataset.map(partial(processor.tokenize, tokenizer=tokenizer))
+        dataset = dataset.map(processor.decode_feat)
     spec_aug = conf.get('spec_aug', True)
     spec_sub = conf.get('spec_sub', False)
     spec_trim = conf.get('spec_trim', False)
