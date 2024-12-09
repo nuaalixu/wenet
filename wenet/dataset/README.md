@@ -1,4 +1,4 @@
-# Unified IO for precomputed feature
+# Unified IO for Precomputed Features
 
 ## What It is
 I modified the wenet dataset to load precomputed features from kaldi, supporting both raw and shard modes.
@@ -6,7 +6,9 @@ I modified the wenet dataset to load precomputed features from kaldi, supporting
 Only works with Kaldi's binary file format
 
 ## How To Use
-You only need to replace the original files with the modified ones, _dataset.py_ and _processor.py_.
+Git clone or download the official repository of Wenet.
+
+Replace the original files with the modified ones, _dataset.py_ and _processor.py_.
 
 And then add a new parameter `use_precomputed_feat: true` in the `dataset_conf` section of the configuration file _config.yaml_.
 
