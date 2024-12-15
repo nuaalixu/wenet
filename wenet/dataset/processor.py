@@ -462,6 +462,53 @@ def filter(sample,
     return True
 
 
+def filter_feat(sample,
+                max_length=10240,
+                min_length=10,
+                token_max_length=200,
+                token_min_length=1,
+                min_output_input_ratio=0.0005,
+                max_output_input_ratio=1):
+    """ Filter sample according to feature and label length
+        Inplace operation.
+
+        Args::
+            sample: {key, wav, label, sample_rate, ...}]
+            max_length: drop utterance which is greater than max_length(10ms)
+            min_length: drop utterance which is less than min_length(10ms)
+            token_max_length: drop utterance which is greater than
+                token_max_length, especially when use char unit for
+                english modeling
+            token_min_length: drop utterance which is
+                less than token_max_length
+            min_output_input_ratio: minimal ration of
+                token_length / feats_length(10ms)
+            max_output_input_ratio: maximum ration of
+                token_length / feats_length(10ms)
+
+        Returns:
+            bool: True to keep, False to filter
+    """
+    assert 'feat' in sample
+    num_frames = sample['feat'].size(0)
+    if num_frames < min_length:
+        return False
+    if num_frames > max_length:
+        return False
+
+    if 'label' in sample:
+        if len(sample['label']) < token_min_length:
+            return False
+        if len(sample['label']) > token_max_length:
+            return False
+        if num_frames != 0:
+            if len(sample['label']) / num_frames < min_output_input_ratio:
+                return False
+            if len(sample['label']) / num_frames > max_output_input_ratio:
+                return False
+    return True
+
+
 def spec_aug(sample, num_t_mask=2, num_f_mask=2, max_t=50, max_f=10, max_w=80):
     """ Do spec augmentation
         Inplace operation

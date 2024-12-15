@@ -115,7 +115,9 @@ def Dataset(data_type,
 
         if tokenizer is not None:
             dataset = dataset.map(partial(processor.tokenize, tokenizer=tokenizer))
-        dataset = dataset.map(processor.decode_feat)
+        dataset = dataset.map_ignore_error(processor.decode_feat)
+        filter_conf = conf.get('filter_conf', {})
+        dataset = dataset.filter(partial(processor.filter_feat, **filter_conf))
     spec_aug = conf.get('spec_aug', True)
     spec_sub = conf.get('spec_sub', False)
     spec_trim = conf.get('spec_trim', False)
