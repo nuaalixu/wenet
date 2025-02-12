@@ -13,16 +13,23 @@
 # limitations under the License.
 
 import os
-import torch
 
+import torch
+from wenet.branchformer.encoder import BranchformerEncoder
+from wenet.ctl_model.asr_model_ctl import CTLModel
+from wenet.ctl_model.encoder import (DualConformerEncoder,
+                                     DualTransformerEncoder)
+from wenet.e_branchformer.encoder import EBranchformerEncoder
+from wenet.efficient_conformer.encoder import EfficientConformerEncoder
 from wenet.finetune.lora.utils import (inject_lora_to_model,
                                        mark_only_lora_as_trainable)
+from wenet.firered.encoder import FireRedConformerEncoder
+from wenet.firered.model import FireReadModel
 from wenet.k2.model import K2Model
 from wenet.paraformer.cif import Cif
 from wenet.paraformer.layers import SanmDecoder, SanmEncoder
 from wenet.paraformer.paraformer import Paraformer, Predictor
-from wenet.LLM.causallm_model import CausalLM
-from wenet.LLM.decoder import DecoderOnly
+from wenet.squeezeformer.encoder import SqueezeformerEncoder
 from wenet.ssl.init_model import WENET_SSL_MODEL_CLASS
 from wenet.transducer.joint import TransducerJoint
 from wenet.transducer.predictor import (ConvPredictor, EmbeddingPredictor,
@@ -31,18 +38,11 @@ from wenet.transducer.transducer import Transducer
 from wenet.transformer.asr_model import ASRModel
 from wenet.transformer.cmvn import GlobalCMVN
 from wenet.transformer.ctc import CTC
-from wenet.transformer.encoder import TransformerEncoder, ConformerEncoder
 from wenet.transformer.decoder import BiTransformerDecoder, TransformerDecoder
-from wenet.branchformer.encoder import BranchformerEncoder
-from wenet.e_branchformer.encoder import EBranchformerEncoder
-from wenet.squeezeformer.encoder import SqueezeformerEncoder
-from wenet.efficient_conformer.encoder import EfficientConformerEncoder
-from wenet.ctl_model.encoder import DualTransformerEncoder, DualConformerEncoder
-from wenet.ctl_model.asr_model_ctl import CTLModel
-from wenet.whisper.whisper import Whisper
-from wenet.utils.cmvn import load_cmvn
+from wenet.transformer.encoder import ConformerEncoder, TransformerEncoder
 from wenet.utils.checkpoint import load_checkpoint, load_trained_modules
-
+from wenet.utils.cmvn import load_cmvn
+from wenet.whisper.whisper import Whisper
 
 WENET_ENCODER_CLASSES = {
     "transformer": TransformerEncoder,
@@ -54,6 +54,7 @@ WENET_ENCODER_CLASSES = {
     "dual_transformer": DualTransformerEncoder,
     "dual_conformer": DualConformerEncoder,
     'sanm_encoder': SanmEncoder,
+    "firered_conformer": FireRedConformerEncoder,
 }
 
 WENET_DECODER_CLASSES = {
@@ -82,10 +83,10 @@ WENET_MODEL_CLASSES = {
     "asr_model": ASRModel,
     "ctl_model": CTLModel,
     "whisper": Whisper,
+    "firered": FireReadModel,
     "k2_model": K2Model,
     "transducer": Transducer,
     'paraformer': Paraformer,
-    'causal_llm': CausalLM,
 }
 
 
@@ -172,30 +173,11 @@ def init_speech_model(args, configs):
     return model, configs
 
 
-def init_causal_llm(configs):
-    vocab_size = configs['output_dim']
-    assert configs['decoder'] == 'decoder_only'
-    assert configs['model'] == 'causal_lm'
-    decoder_only = DecoderOnly(**configs['decoder_conf'])
-
-    model = CausalLM(
-        vocab_size,
-        decoder_only,
-        **configs['model_conf'],
-        special_tokens=configs.get('tokenizer_conf',
-                                   {}).get('special_tokens', None),
-    )
-    return model, configs
-
-
 def init_model(args, configs):
 
     model_type = configs.get('model', 'asr_model')
     configs['model'] = model_type
-    if model_type == 'causal_lm':
-        model, configs = init_causal_llm(configs)
-    else:
-        model, configs = init_speech_model(args, configs)
+    model, configs = init_speech_model(args, configs)
 
     if hasattr(args, 'use_lora') and args.use_lora:
         inject_lora_to_model(model, configs['lora_conf'])
@@ -213,12 +195,13 @@ def init_model(args, configs):
         if hasattr(args, 'lora_ckpt_path') and args.lora_ckpt_path:
             load_checkpoint(model, args.lora_ckpt_path)
 
-    print(configs)
     # Trye to tie some weights
     if hasattr(model, 'tie_or_clone_weights'):
         if not hasattr(args, 'jit'):
-            args.jit = True  # i.e. export onnx/jit/ipex
-        model.tie_or_clone_weights(args.jit)
+            jit = True  # i.e. export onnx/jit/ipex
+        else:
+            jit = False
+        model.tie_or_clone_weights(jit)
 
     if hasattr(args, 'only_optimize_lora') and args.only_optimize_lora:
         mark_only_lora_as_trainable(model, bias='lora_only')
