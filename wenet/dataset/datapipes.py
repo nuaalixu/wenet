@@ -28,7 +28,7 @@ from torch.utils.data.datapipes.iter.sharding import (
     SHARDING_PRIORITIES, ShardingFilterIterDataPipe)
 from torch.utils.data.datapipes.utils.common import _check_unpickable_fn
 
-from wenet.dataset.processor import parse_url
+from wenet.dataset.processor import parse_url, parse_json
 
 
 @functional_datapipe("map_ignore_error")
@@ -468,3 +468,62 @@ class WenetTarShardDatasetSource(IterDataPipe):
     def __iter__(self):
         for d in self.dp:
             yield d
+
+
+class WenetArkDatasetSource(IterDataPipe):
+
+    def __init__(self,
+                 filenames: str,
+                 prefetch: int = 500,
+                 partition: bool = True,
+                 shuffle: bool = False,
+                 shuffle_size: int = 10000,
+                 cycle: int = 1,
+                 load_feat: bool = False) -> None:
+        super().__init__()
+        self.dp = TextLineDataPipe(filenames)
+        if shuffle:
+            self.dp = self.dp.shuffle(buffer_size=shuffle_size)
+        self.dp = self.dp.repeat(cycle).prefetch(prefetch)
+        self.dp = self.dp.shard(partition).map(parse_json)
+        if load_feat:
+            self.dp = self.dp.map_ignore_error(self._load_feat)
+        else:
+            self.dp = self.dp.map_ignore_error(self._load_wave)
+
+    def __iter__(self):
+        for d in self.dp:
+            yield d
+
+    @staticmethod
+    def _load_wave(sample):
+        """load wave from ark file"""
+        assert 'key' in sample
+        assert 'wav' in sample
+        import re
+        import torchaudio
+        wav_file = sample['wav']
+        if re.search(':[0-9]+$', wav_file):
+            ark_file, offset = wav_file.rsplit(':', 1)
+            offset = int(offset)
+            with open(ark_file, 'rb') as file_obj:
+                file_obj.seek(offset)
+                info = torchaudio.info(file_obj)
+                size = 44 + info.num_frames * info.bits_per_sample // 8
+                file_obj.seek(offset)
+                sample['wav'] = file_obj.read(size)
+            return sample
+        else:
+            raise ValueError(f'invalid ark path: {wav_file}')
+
+    @staticmethod
+    def _load_feat(sample):
+        """load kaldi's feat from ark file"""
+        assert 'key' in sample
+        assert 'feat' in sample
+        import wenet.dataset.kaldi_io as kaldi_io
+        feat_file = sample['feat']
+        mat = kaldi_io.read_mat(feat_file)
+        sample['feat'] = torch.from_numpy(np.array(mat))
+        sample['wav'] = torch.tensor([[0,]], dtype=torch.float32)  # fake wav for compatibility
+        return sample

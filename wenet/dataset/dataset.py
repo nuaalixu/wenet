@@ -18,7 +18,8 @@ import sys
 from typing import Optional
 from wenet.dataset import processor
 from wenet.dataset.datapipes import (WenetRawDatasetSource,
-                                     WenetTarShardDatasetSource)
+                                     WenetTarShardDatasetSource,
+                                     WenetArkDatasetSource)
 from wenet.text.base_tokenizer import BaseTokenizer
 from wenet.utils.file_utils import read_symbol_table
 
@@ -40,7 +41,7 @@ def Dataset(data_type,
             partition(bool): whether to do data partition in terms of rank
     """
     assert conf is not None
-    assert data_type in ['raw', 'shard']
+    assert data_type in ['raw', 'shard', 'ark']
     # cycle dataset
     cycle = conf.get('cycle', 1)
     # stage1 shuffle: source
@@ -50,6 +51,9 @@ def Dataset(data_type,
         list_shuffle_conf = conf.get('list_shuffle_conf', {})
         list_shuffle_size = list_shuffle_conf.get('shuffle_size',
                                                   list_shuffle_size)
+    use_precomputed_feat = conf.get('use_precomputed_feat', False)
+    if use_precomputed_feat:
+        assert data_type == 'ark'
     if data_type == 'raw':
         dataset = WenetRawDatasetSource(data_list_file,
                                         partition=partition,
@@ -57,6 +61,13 @@ def Dataset(data_type,
                                         shuffle_size=list_shuffle_size,
                                         cycle=cycle)
         dataset = dataset.map(processor.parse_json)
+    elif data_type == 'ark':
+        dataset = WenetArkDatasetSource(data_list_file,
+                                        partition=partition,
+                                        shuffle=list_shuffle,
+                                        shuffle_size=list_shuffle_size,
+                                        cycle=cycle,
+                                        load_feat=use_precomputed_feat)
     else:
         dataset = WenetTarShardDatasetSource(data_list_file,
                                              partition=partition,
@@ -64,7 +75,6 @@ def Dataset(data_type,
                                              shuffle_size=list_shuffle_size,
                                              cycle=cycle)
         
-    use_precomputed_feat = conf.get('use_precomputed_feat', False)
     if not use_precomputed_feat:
         dataset = dataset.map_ignore_error(processor.decode_wav)
 
@@ -115,7 +125,7 @@ def Dataset(data_type,
 
         if tokenizer is not None:
             dataset = dataset.map(partial(processor.tokenize, tokenizer=tokenizer))
-        dataset = dataset.map_ignore_error(processor.decode_feat)
+        
         filter_conf = conf.get('filter_conf', {})
         dataset = dataset.filter(partial(processor.filter_feat, **filter_conf))
     spec_aug = conf.get('spec_aug', True)

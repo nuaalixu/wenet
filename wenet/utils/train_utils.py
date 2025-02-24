@@ -96,7 +96,7 @@ def add_trace_args(parser):
 def add_dataset_args(parser):
     parser.add_argument('--data_type',
                         default='raw',
-                        choices=['raw', 'shard'],
+                        choices=['raw', 'shard', 'ark'],
                         help='train and cv data type')
     parser.add_argument('--train_data', required=True, help='train data file')
     parser.add_argument('--cv_data', required=True, help='cv data file')

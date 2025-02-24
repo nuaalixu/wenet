@@ -156,30 +156,6 @@ def decode_wav(sample):
     return sample
 
 
-def decode_feat(sample):
-    """ Parse key/wav/txt from json line
-
-        Args:
-            sample: str, str is a json line has key/wav
-
-        Returns:
-            {key, wav, sample_rate, ...}
-    """
-    assert 'key' in sample
-    assert 'feat' in sample
-    import wenet.dataset.kaldi_io as kaldi_io
-    feat_file = sample['feat']
-    if isinstance(feat_file, str):
-        mat = kaldi_io.read_mat(feat_file)
-    else:
-        with io.BytesIO(feat_file) as file_obj:
-            mat = kaldi_io.read_mat(file_obj)
-
-    sample['feat'] = torch.from_numpy(mat)
-    sample['wav'] = torch.from_numpy(mat)  # fake wav for compatibility
-    return sample
-
-
 def singal_channel(sample, channel=0):
     """ Choose a channel of sample.
         Inplace operation.
