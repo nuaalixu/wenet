@@ -19,7 +19,7 @@ from typing import Optional
 from wenet.dataset import processor
 from wenet.dataset.datapipes import (WenetRawDatasetSource,
                                      WenetTarShardDatasetSource,
-                                     WenetArkDatasetSource)
+                                     WenetArkDatasetSource, WenetTarShardArkDatasetSource)
 from wenet.text.base_tokenizer import BaseTokenizer
 from wenet.utils.file_utils import read_symbol_table
 
@@ -41,7 +41,7 @@ def Dataset(data_type,
             partition(bool): whether to do data partition in terms of rank
     """
     assert conf is not None
-    assert data_type in ['raw', 'shard', 'ark']
+    assert data_type in ['raw', 'shard', 'ark', 'shard_ark']
     # cycle dataset
     cycle = conf.get('cycle', 1)
     # stage1 shuffle: source
@@ -53,7 +53,7 @@ def Dataset(data_type,
                                                   list_shuffle_size)
     use_precomputed_feat = conf.get('use_precomputed_feat', False)
     if use_precomputed_feat:
-        assert data_type == 'ark'
+        assert 'ark' in data_type
     if data_type == 'raw':
         dataset = WenetRawDatasetSource(data_list_file,
                                         partition=partition,
@@ -63,6 +63,13 @@ def Dataset(data_type,
         dataset = dataset.map(processor.parse_json)
     elif data_type == 'ark':
         dataset = WenetArkDatasetSource(data_list_file,
+                                        partition=partition,
+                                        shuffle=list_shuffle,
+                                        shuffle_size=list_shuffle_size,
+                                        cycle=cycle,
+                                        load_feat=use_precomputed_feat)
+    elif data_type == 'shard_ark':
+        dataset = WenetTarShardArkDatasetSource(data_list_file,
                                         partition=partition,
                                         shuffle=list_shuffle,
                                         shuffle_size=list_shuffle_size,

@@ -19,17 +19,19 @@ import json
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='use precomputed feat instead of wav')
-    parser.add_argument('feat_file', help='feat file from kaldi')
+    parser.add_argument('--use_feat', action='store_true', help='use precomputed features')
+    parser.add_argument('wav_file', help='wav scp or feat scp from kaldi')
     parser.add_argument('text_file', help='text file')
     parser.add_argument('output_file', help='output list file')
     args = parser.parse_args()
 
-    feat_table = {}
-    with open(args.feat_file, 'r', encoding='utf8') as fin:
+    wav_table = {}
+    wav_key = 'feat' if args.use_feat else 'wav'
+    with open(args.wav_file, 'r', encoding='utf8') as fin:
         for line in fin:
             arr = line.strip().split()
             assert len(arr) == 2
-            feat_table[arr[0]] = arr[1]
+            wav_table[arr[0]] = arr[1]
 
     with open(args.text_file, 'r', encoding='utf8') as fin, \
          open(args.output_file, 'w', encoding='utf8') as fout:
@@ -38,9 +40,9 @@ if __name__ == '__main__':
             key = arr[0]
             txt = arr[1] if len(arr) > 1 else ''
 
-            assert key in feat_table
-            feat = feat_table[key]
-            line = dict(key=key, feat=feat, txt=txt)
+            assert key in wav_table
+            wav = wav_table[key]
+            line = {'key':key, wav_key:wav, 'txt':txt}
 
             json_line = json.dumps(line, ensure_ascii=False)
             fout.write(json_line + '\n')

@@ -527,3 +527,99 @@ class WenetArkDatasetSource(IterDataPipe):
         sample['feat'] = torch.from_numpy(np.array(mat))
         sample['wav'] = torch.tensor([[0,]], dtype=torch.float32)  # fake wav for compatibility
         return sample
+
+
+@functional_datapipe("ark_tar_file_and_group")
+class ArkTarsDataPipe(IterDataPipe):
+    """ Decode wenet's tar , yield {'txt': "...", "raw": "..."}
+    """
+
+    def __init__(self, dataset: IterDataPipe) -> None:
+        super().__init__()
+        self.dp = dataset
+
+    def __iter__(self):
+        from wenet.dataset.processor import AUDIO_FORMAT_SETS
+        for sample in self.dp:
+            assert 'file_name' in sample
+            assert 'line' in sample
+            assert 'stream' in sample
+            try:
+                with tarfile.open(fileobj=sample['stream'],
+                                  mode="r:*") as stream:
+                    prev_prefix = None
+                    example = {
+                        'file_name': sample['file_name'],
+                        'tar_file_name': sample['line']
+                    }
+                    valid = True
+                    for tarinfo in stream:
+                        name = tarinfo.name
+                        pos = name.rfind('.')
+                        assert pos > 0
+                        prefix, postfix = name[:pos], name[pos + 1:]
+                        if prev_prefix is not None and prefix != prev_prefix:
+                            example['key'] = prev_prefix
+                            if valid:
+                                yield example
+                            example = {
+                                'file_name': sample['file_name'],
+                                'tar_file_name': sample['line']
+                            }
+                            valid = True
+                        with stream.extractfile(tarinfo) as file_obj:
+                            try:
+                                if postfix == 'txt':
+                                    example['txt'] = file_obj.read().decode(
+                                        'utf8').strip()
+                                elif postfix == 'wav':
+                                    example['wav'] = file_obj.read().decode(
+                                        'utf8').strip()
+                                elif postfix == 'feat':
+                                    example['feat'] = file_obj.read().decode(
+                                        'utf8').strip()
+                                else:
+                                    example[postfix] = file_obj.read()
+                            except Exception as ex:
+                                valid = False
+                                logging.warning(
+                                    'error to parse {}'.format(name))
+                            prev_prefix = prefix
+                    if prev_prefix is not None:
+                        example['key'] = prev_prefix
+                        yield example
+            except Exception as ex:
+                msg = 'In tar_file_and_group: {} when processing {}'.format(
+                    ex, sample['line'])
+                logging.warning(msg)
+            finally:
+                if 'process' in sample:
+                    sample['process'].communicate()
+                sample['stream'].close()
+
+
+class WenetTarShardArkDatasetSource(IterDataPipe):
+
+    def __init__(self,
+                 filenames: str,
+                 prefetch: int = 500,
+                 partition: bool = True,
+                 shuffle: bool = False,
+                 shuffle_size: int = 10000,
+                 cycle: int = 1,
+                 load_feat: bool = False) -> None:
+        super().__init__()
+        self.dp = TextLineDataPipe(filenames)
+        if shuffle:
+            self.dp = self.dp.shuffle(buffer_size=shuffle_size)
+        self.dp = self.dp.repeat(cycle)
+        self.dp = self.dp.shard(partition).map_ignore_error(
+            parse_url).ark_tar_file_and_group().prefetch(prefetch)
+        if load_feat:
+            self.dp = self.dp.map_ignore_error(WenetArkDatasetSource._load_feat)
+        else:
+            self.dp = self.dp.map_ignore_error(WenetArkDatasetSource._load_wave)
+
+    def __iter__(self):
+        for d in self.dp:
+            yield d
