@@ -38,7 +38,7 @@ def get_args():
     parser.add_argument('--test_data', required=True, help='test data file')
     parser.add_argument('--data_type',
                         default='raw',
-                        choices=['raw', 'shard'],
+                        choices=['raw', 'shard', 'ark', 'shard_ark'],
                         help='train and cv data type')
     parser.add_argument('--gpu',
                         type=int,
