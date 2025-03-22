@@ -10,7 +10,7 @@ Git clone or download the official repository of Wenet as you usually do.
 
 Replace the original files with the modified ones, _dataset.py_, _datapipes.py_,  _processor.py_ and _train\_utils.py_ from this repository.
 
-And then add a new parameter `use_precomputed_feat: true` in the `dataset_conf` section of the configuration file like _train*.yaml_.
+If use precomputed features as input, add a new parameter `use_precomputed_feat: true` in the `dataset_conf` section of the configuration file like _train*.yaml_.
 
 e.g.: 
 
@@ -18,7 +18,7 @@ e.g.:
 ...
 dataset: asr
 dataset_conf:
-    use_precomputed_feat: true
+    use_precomputed_feat: true  # use kaldi's features as input
     filter_conf:
         max_length: 40960
 ...
@@ -46,6 +46,10 @@ _train\_utils_.py:
 add a new choice 'ark' for `data_type` argument.
 
 ## Useful Tools
-_tools/make_raw_list_feat.py_: 
+_tools/make_raw_list_ark.py_: 
 
-make a raw list from feats.scp and text.
+set `--use_feat` to make a raw list from feats.scp and text.
+
+_tools/make_shard_list_ark.py_:
+
+archieve wav.scp/feats.scp and text file.
